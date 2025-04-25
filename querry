@@ -1,0 +1,211 @@
+
+-- 1. Distribusi Beban SKS
+SELECT p.semester, p.tahun_ajaran, p.ganjil_genap,
+       m.nrp, m.nama_mhs, m.prodi, m.angkatan,
+       SUM(mk.sks_mk) AS total_sks,
+       COUNT(f.matakuliah) AS jumlah_matkul
+FROM fact_frs f
+JOIN dim_mahasiswa m ON f.mahasiswa = m.sk_mhs
+JOIN dim_matakuliah mk ON f.matakuliah = mk.sk_mk
+JOIN dim_periode p ON f.semester = p.semester
+GROUP BY p.semester, p.tahun_ajaran, p.ganjil_genap, m.nrp, m.nama_mhs, m.prodi, m.angkatan
+ORDER BY p.semester, total_sks DESC;
+
+-- 2. Tingkat Partisipasi Angkatan
+SELECT m.angkatan, p.semester, p.tahun_ajaran, p.ganjil_genap,
+       COUNT(DISTINCT f.mahasiswa) AS jumlah_mhs_aktif,
+       (SELECT COUNT(*) FROM dim_mahasiswa WHERE angkatan = m.angkatan AND status_mhs = 1) AS total_mhs_angkatan,
+       ROUND(COUNT(DISTINCT f.mahasiswa) / 
+             (SELECT COUNT(*) FROM dim_mahasiswa WHERE angkatan = m.angkatan AND status_mhs = 1) * 100, 2) AS persentase_partisipasi
+FROM fact_frs f
+JOIN dim_mahasiswa m ON f.mahasiswa = m.sk_mhs
+JOIN dim_periode p ON f.semester = p.semester
+WHERE m.status_mhs = 1
+GROUP BY m.angkatan, p.semester, p.tahun_ajaran, p.ganjil_genap
+ORDER BY m.angkatan, p.semester;
+
+-- 3. Rata-rata Nilai per Mata Kuliah
+SELECT mk.kode_mk, mk.nama_mk, p.semester, p.tahun_ajaran, p.ganjil_genap,
+       ROUND(AVG(pn.nilai_angka), 2) AS rata_nilai,
+       COUNT(pn.mahasiswa) AS jumlah_mahasiswa
+FROM fact_penilaian pn
+JOIN dim_matakuliah mk ON pn.matakuliah = mk.sk_mk
+JOIN dim_periode p ON pn.semester = p.semester
+GROUP BY mk.kode_mk, mk.nama_mk, p.semester, p.tahun_ajaran, p.ganjil_genap
+ORDER BY p.semester, rata_nilai DESC;
+
+-- 4. Tingkat Kelulusan
+SELECT mk.kode_mk, mk.nama_mk, p.semester, p.tahun_ajaran, p.ganjil_genap,
+       COUNT(pn.mahasiswa) AS total_mahasiswa,
+       SUM(CASE WHEN pn.nilai_huruf IN ('A', 'B', 'C', 'D') THEN 1 ELSE 0 END) AS jumlah_lulus,
+       SUM(CASE WHEN pn.nilai_huruf = 'E' THEN 1 ELSE 0 END) AS jumlah_tidak_lulus,
+       ROUND(SUM(CASE WHEN pn.nilai_huruf IN ('A', 'B', 'C', 'D') THEN 1 ELSE 0 END) / COUNT(pn.mahasiswa) * 100, 2) AS persentase_kelulusan
+FROM fact_penilaian pn
+JOIN dim_matakuliah mk ON pn.matakuliah = mk.sk_mk
+JOIN dim_periode p ON pn.semester = p.semester
+GROUP BY mk.kode_mk, mk.nama_mk, p.semester, p.tahun_ajaran, p.ganjil_genap
+ORDER BY persentase_kelulusan;
+
+-- 5. Distribusi Nilai
+SELECT mk.kode_mk, mk.nama_mk, p.semester, p.tahun_ajaran, p.ganjil_genap,
+       COUNT(pn.mahasiswa) AS total_mahasiswa,
+       SUM(CASE WHEN pn.nilai_huruf = 'A' THEN 1 ELSE 0 END) AS nilai_A,
+       SUM(CASE WHEN pn.nilai_huruf = 'B' THEN 1 ELSE 0 END) AS nilai_B,
+       SUM(CASE WHEN pn.nilai_huruf = 'C' THEN 1 ELSE 0 END) AS nilai_C,
+       SUM(CASE WHEN pn.nilai_huruf = 'D' THEN 1 ELSE 0 END) AS nilai_D,
+       SUM(CASE WHEN pn.nilai_huruf = 'E' THEN 1 ELSE 0 END) AS nilai_E,
+       ROUND(SUM(CASE WHEN pn.nilai_huruf = 'A' THEN 1 ELSE 0 END) / COUNT(pn.mahasiswa) * 100, 2) AS persen_A,
+       ROUND(SUM(CASE WHEN pn.nilai_huruf = 'B' THEN 1 ELSE 0 END) / COUNT(pn.mahasiswa) * 100, 2) AS persen_B,
+       ROUND(SUM(CASE WHEN pn.nilai_huruf = 'C' THEN 1 ELSE 0 END) / COUNT(pn.mahasiswa) * 100, 2) AS persen_C,
+       ROUND(SUM(CASE WHEN pn.nilai_huruf = 'D' THEN 1 ELSE 0 END) / COUNT(pn.mahasiswa) * 100, 2) AS persen_D,
+       ROUND(SUM(CASE WHEN pn.nilai_huruf = 'E' THEN 1 ELSE 0 END) / COUNT(pn.mahasiswa) * 100, 2) AS persen_E
+FROM fact_penilaian pn
+JOIN dim_matakuliah mk ON pn.matakuliah = mk.sk_mk
+JOIN dim_periode p ON pn.semester = p.semester
+GROUP BY mk.kode_mk, mk.nama_mk, p.semester, p.tahun_ajaran, p.ganjil_genap
+ORDER BY mk.kode_mk, p.semester;
+
+-- 6. Indeks Prestasi Semester (IPS)
+SELECT m.nrp, m.nama_mhs, m.prodi, m.angkatan, p.semester, p.tahun_ajaran, p.ganjil_genap,
+       SUM(pn.nilai_angka * mk.sks_mk) / SUM(mk.sks_mk) AS IPS,
+       SUM(mk.sks_mk) AS total_sks,
+       COUNT(pn.matakuliah) AS jumlah_matkul
+FROM fact_penilaian pn
+JOIN dim_mahasiswa m ON pn.mahasiswa = m.sk_mhs
+JOIN dim_matakuliah mk ON pn.matakuliah = mk.sk_mk
+JOIN dim_periode p ON pn.semester = p.semester
+GROUP BY m.nrp, m.nama_mhs, m.prodi, m.angkatan, p.semester, p.tahun_ajaran, p.ganjil_genap
+ORDER BY p.semester, IPS DESC;
+
+-- 7. Tingkat Kesulitan Mata Kuliah
+SELECT mk.kode_mk, mk.nama_mk, mk.sks_mk,
+       ROUND(AVG(pn.nilai_angka), 2) AS rata_nilai,
+       SUM(CASE WHEN pn.nilai_huruf = 'E' THEN 1 ELSE 0 END) AS jumlah_gagal,
+       COUNT(pn.mahasiswa) AS total_mahasiswa,
+       ROUND(SUM(CASE WHEN pn.nilai_huruf = 'E' THEN 1 ELSE 0 END) / COUNT(pn.mahasiswa) * 100, 2) AS persentase_gagal,
+       CASE 
+         WHEN AVG(pn.nilai_angka) < 60 THEN 'Sangat Sulit'
+         WHEN AVG(pn.nilai_angka) < 70 THEN 'Sulit'
+         WHEN AVG(pn.nilai_angka) < 80 THEN 'Sedang'
+         ELSE 'Mudah'
+       END AS kategori_kesulitan
+FROM fact_penilaian pn
+JOIN dim_matakuliah mk ON pn.matakuliah = mk.sk_mk
+JOIN dim_periode p ON pn.semester = p.semester
+GROUP BY mk.kode_mk, mk.nama_mk, mk.sks_mk
+ORDER BY rata_nilai ASC;
+
+-- 6. Performa Dosen
+SELECT d.nip_dosen, d.nama_dosen, p.semester, p.tahun_ajaran, p.ganjil_genap,
+       mk.kode_mk, mk.nama_mk,
+       ROUND(AVG(pn.nilai_angka), 2) AS rata_nilai_kelas,
+       COUNT(pn.mahasiswa) AS jumlah_mahasiswa,
+       SUM(CASE WHEN pn.nilai_huruf IN ('A', 'B') THEN 1 ELSE 0 END) AS nilai_baik,
+       ROUND(SUM(CASE WHEN pn.nilai_huruf IN ('A', 'B') THEN 1 ELSE 0 END) / COUNT(pn.mahasiswa) * 100, 2) AS persentase_nilai_baik
+FROM fact_penilaian pn
+JOIN dim_dosen d ON pn.dosen_pengampu = d.sk_dosen
+JOIN dim_matakuliah mk ON pn.matakuliah = mk.sk_mk
+JOIN dim_periode p ON pn.semester = p.semester
+GROUP BY d.nip_dosen, d.nama_dosen, p.semester, p.tahun_ajaran, p.ganjil_genap, mk.kode_mk, mk.nama_mk
+ORDER BY rata_nilai_kelas DESC;
+
+
+-- 7. Beban Mengajar Dosen
+SELECT d.nip_dosen, d.nama_dosen, p.semester, p.tahun_ajaran, p.ganjil_genap,
+       COUNT(dp.matakuliah) AS jumlah_matkul,
+       SUM(mk.sks_mk) AS total_sks_mengajar
+FROM fact_dosenpengajar dp
+JOIN dim_dosen d ON dp.dosen = d.sk_dosen
+JOIN dim_matakuliah mk ON dp.matakuliah = mk.sk_mk
+JOIN dim_periode p ON dp.semester = p.semester
+GROUP BY d.nip_dosen, d.nama_dosen, p.semester, p.tahun_ajaran, p.ganjil_genap
+ORDER BY p.semester, total_sks_mengajar DESC;
+
+-- 8. Rasio Dosen-Mata Kuliah
+SELECT p.semester, p.tahun_ajaran, p.ganjil_genap,
+       mk.kode_mk, mk.nama_mk, 
+       COUNT(DISTINCT dp.dosen) AS jumlah_dosen_pengampu,
+       (SELECT COUNT(DISTINCT frs.mahasiswa) 
+        FROM fact_frs frs 
+        WHERE frs.matakuliah = mk.sk_mk AND frs.semester = p.semester) AS jumlah_mahasiswa,
+       ROUND((SELECT COUNT(DISTINCT frs.mahasiswa) 
+             FROM fact_frs frs 
+             WHERE frs.matakuliah = mk.sk_mk AND frs.semester = p.semester) / 
+            NULLIF(COUNT(DISTINCT dp.dosen), 0), 2) AS rasio_mahasiswa_per_dosen
+FROM fact_dosenpengajar dp
+JOIN dim_matakuliah mk ON dp.matakuliah = mk.sk_mk
+JOIN dim_periode p ON dp.semester = p.semester
+GROUP BY p.semester, p.tahun_ajaran, p.ganjil_genap, mk.kode_mk, mk.nama_mk
+ORDER BY rasio_mahasiswa_per_dosen DESC;
+
+
+
+-- ============================================================================
+-- KPI DARI TABEL FAKTA JADWAL (fact_jadwal)
+-- ============================================================================
+
+-- 9. Utilisasi Ruangan
+SELECT r.kode_ruangan, r.lokasi_ruangan, p.semester, p.tahun_ajaran, p.ganjil_genap,
+       COUNT(j.matakuliah) AS jumlah_jadwal,
+       SUM(TIME_TO_SEC(TIMEDIFF(j.jam_selesai, j.jam_mulai))/3600) AS total_jam_penggunaan,
+       ROUND(SUM(TIME_TO_SEC(TIMEDIFF(j.jam_selesai, j.jam_mulai))/3600) / 
+             (COUNT(DISTINCT j.hari) * 12) * 100, 2) AS persentase_utilisasi
+FROM fact_jadwal j
+JOIN dim_ruangan r ON j.ruangan = r.sk_ruangan
+JOIN dim_periode p ON j.semester = p.semester
+GROUP BY r.kode_ruangan, r.lokasi_ruangan, p.semester, p.tahun_ajaran, p.ganjil_genap
+ORDER BY persentase_utilisasi DESC;
+
+-- 10. Efisiensi Penggunaan Waktu
+SELECT j.hari, p.semester, p.tahun_ajaran, p.ganjil_genap,
+       COUNT(j.matakuliah) AS jumlah_kelas,
+       COUNT(DISTINCT j.ruangan) AS jumlah_ruangan_terpakai,
+       SUM(CASE WHEN TIME(j.jam_mulai) < '10:00:00' THEN 1 ELSE 0 END) AS kelas_pagi,
+       SUM(CASE WHEN TIME(j.jam_mulai) >= '10:00:00' AND TIME(j.jam_mulai) < '14:00:00' THEN 1 ELSE 0 END) AS kelas_siang,
+       SUM(CASE WHEN TIME(j.jam_mulai) >= '14:00:00' THEN 1 ELSE 0 END) AS kelas_sore
+FROM fact_jadwal j
+JOIN dim_periode p ON j.semester = p.semester
+GROUP BY j.hari, p.semester, p.tahun_ajaran, p.ganjil_genap
+ORDER BY FIELD(j.hari, 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'), p.semester;
+
+-- 11. Tingkat Benturan Jadwal
+WITH MahasiswaJadwal AS (
+    SELECT f.mahasiswa, j.hari, j.jam_mulai, j.jam_selesai, mk.kode_mk, mk.nama_mk
+    FROM fact_frs f
+    JOIN fact_jadwal j ON f.matakuliah = j.matakuliah AND f.semester = j.semester
+    JOIN dim_matakuliah mk ON f.matakuliah = mk.sk_mk
+    WHERE f.semester = 3  -- Ganti dengan semester yang diinginkan
+)
+SELECT m.nrp, m.nama_mhs, m.prodi, mj1.hari,
+       mj1.kode_mk AS matkul1, mj1.jam_mulai AS mulai1, mj1.jam_selesai AS selesai1,
+       mj2.kode_mk AS matkul2, mj2.jam_mulai AS mulai2, mj2.jam_selesai AS selesai2
+FROM MahasiswaJadwal mj1
+JOIN MahasiswaJadwal mj2 ON mj1.mahasiswa = mj2.mahasiswa 
+                         AND mj1.hari = mj2.hari 
+                         AND mj1.kode_mk < mj2.kode_mk
+JOIN dim_mahasiswa m ON mj1.mahasiswa = m.sk_mhs
+WHERE (mj1.jam_mulai < mj2.jam_selesai AND mj1.jam_selesai > mj2.jam_mulai)
+ORDER BY m.nrp, mj1.hari, mj1.jam_mulai;
+
+-- 12. Kepadatan Jadwal per Hari
+SELECT j.hari, p.semester, p.tahun_ajaran, p.ganjil_genap,
+       COUNT(j.matakuliah) AS jumlah_kelas,
+       COUNT(DISTINCT j.ruangan) AS jumlah_ruangan,
+       MIN(j.jam_mulai) AS waktu_kelas_pertama,
+       MAX(j.jam_selesai) AS waktu_kelas_terakhir,
+       ROUND(COUNT(j.matakuliah) / COUNT(DISTINCT j.ruangan), 2) AS rata_kelas_per_ruangan
+FROM fact_jadwal j
+JOIN dim_periode p ON j.semester = p.semester
+GROUP BY j.hari, p.semester, p.tahun_ajaran, p.ganjil_genap
+ORDER BY FIELD(j.hari, 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'), p.semester;
+
+-- 5. Rasio Penggunaan Ruangan
+SELECT r.kode_ruangan, r.lokasi_ruangan, p.semester, p.tahun_ajaran, p.ganjil_genap,
+       COUNT(DISTINCT j.hari) AS jumlah_hari_digunakan,
+       COUNT(j.matakuliah) AS jumlah_kelas,
+       GROUP_CONCAT(DISTINCT j.hari ORDER BY FIELD(j.hari, 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu') SEPARATOR ', ') AS hari_penggunaan
+FROM fact_jadwal j
+JOIN dim_ruangan r ON j.ruangan = r.sk_ruangan
+JOIN dim_periode p ON j.semester = p.semester
+GROUP BY r.kode_ruangan, r.lokasi_ruangan, p.semester, p.tahun_ajaran, p.ganjil_genap
+ORDER BY jumlah_kelas DESC;
