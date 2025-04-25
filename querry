@@ -139,11 +139,6 @@ GROUP BY p.semester, p.tahun_ajaran, p.ganjil_genap, mk.kode_mk, mk.nama_mk
 ORDER BY rasio_mahasiswa_per_dosen DESC;
 
 
-
--- ============================================================================
--- KPI DARI TABEL FAKTA JADWAL (fact_jadwal)
--- ============================================================================
-
 -- 9. Utilisasi Ruangan
 SELECT r.kode_ruangan, r.lokasi_ruangan, p.semester, p.tahun_ajaran, p.ganjil_genap,
        COUNT(j.matakuliah) AS jumlah_jadwal,
@@ -174,7 +169,7 @@ WITH MahasiswaJadwal AS (
     FROM fact_frs f
     JOIN fact_jadwal j ON f.matakuliah = j.matakuliah AND f.semester = j.semester
     JOIN dim_matakuliah mk ON f.matakuliah = mk.sk_mk
-    WHERE f.semester = 3  -- Ganti dengan semester yang diinginkan
+    WHERE f.semester = 3 
 )
 SELECT m.nrp, m.nama_mhs, m.prodi, mj1.hari,
        mj1.kode_mk AS matkul1, mj1.jam_mulai AS mulai1, mj1.jam_selesai AS selesai1,
